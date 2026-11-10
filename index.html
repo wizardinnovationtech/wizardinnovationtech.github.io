@@ -6,7 +6,7 @@
 <title>QR Card Studio</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 
 <!-- ===================== CARD PAGE STYLES (also copied into the downloadable card page) ===================== -->
 <style id="card-css">
@@ -251,7 +251,7 @@ canvas.pv.tall{max-height:560px;width:auto}
         <div class="sec-body">
           <label class="drop" id="logoDrop" for="logoFile">
             <div class="thumb" id="logoThumb"></div>
-            <div class="txt"><b>Company logo</b><span class="hint">Click or drop a PNG, JPG or SVG. A transparent background looks best.</span></div>
+            <div class="txt"><b>Company logo</b><span class="hint" id="logoHint">Click or drop a PNG, JPG or SVG. For sharp printing use the original file: SVG, or PNG at least 1000 px wide. Plain borders are trimmed automatically.</span></div>
             <button class="btn sm" type="button" id="logoRemove">Remove</button>
             <input type="file" id="logoFile" accept="image/*">
           </label>
@@ -399,9 +399,14 @@ canvas.pv.tall{max-height:560px;width:auto}
           </div>
         </div>
         <div data-pane="bc" hidden>
-          <div class="stage"><canvas class="pv" id="bcCanvas"></canvas></div>
-          <div class="opts" style="padding-top:12px">
+          <div class="stage" style="flex-direction:column;gap:10px">
+            <span class="lbl" style="align-self:flex-start">Front</span><canvas class="pv" id="bcCanvas"></canvas>
+            <span class="lbl" style="align-self:flex-start;margin-top:8px">Back</span><canvas class="pv" id="bcBack"></canvas>
+          </div>
+          <div class="opts" style="padding-top:12px;align-items:center">
             <select id="f-bc" data-k="bc.tpl" aria-label="Card design"><option value="split">Split panel (logo left, details right)</option><option value="clean">Clean white</option><option value="bold">Bold colour</option><option value="dark">Dark</option></select>
+            <select id="f-qrSide" data-k="bc.qrSide" aria-label="QR position"><option value="back">QR code on the back</option><option value="front">QR code on the front</option></select>
+            <label class="check" id="ringWrap"><input type="checkbox" id="f-ring" data-k="bc.ring"> Ring around logo</label>
           </div>
         </div>
         <div class="checks" id="checks"></div>
@@ -419,13 +424,16 @@ canvas.pv.tall{max-height:560px;width:auto}
         <h3>Download</h3>
         <div class="dlgrid">
           <button class="btn" type="button" data-dl="lock">Lock screen (PNG)</button>
-          <button class="btn" type="button" data-dl="bc">Business card (PNG)</button>
+          <button class="btn" type="button" data-dl="pdf">Print-ready card (PDF)</button>
+          <button class="btn" type="button" data-dl="bcfront">Card front (PNG)</button>
+          <button class="btn" type="button" data-dl="bcback">Card back (PNG)</button>
           <button class="btn" type="button" data-dl="qrpng">QR code (PNG)</button>
           <button class="btn" type="button" data-dl="qrsvg">QR code (SVG)</button>
           <button class="btn" type="button" data-dl="vcf">Contact file (.vcf)</button>
           <button class="btn" type="button" data-dl="page">Card page (.html)</button>
           <button class="btn pri full" type="button" data-dl="zip">Download everything (.zip)</button>
         </div>
+        <p class="hint"><b>Print-ready PDF:</b> front and back, 3.75 × 2.25 in including 0.125 in bleed, at 600 dpi. Send it straight to a printer. <b>Card PNGs:</b> 3150 × 1800 px (900 dpi). <b>QR SVG:</b> sharp at any size.</p>
         <p class="hint">The card page file works on its own with your images inside. You can send it, host it anywhere, or keep it as a backup.</p>
       </section>
     </aside>
@@ -623,7 +631,7 @@ const EXAMPLE={
   c1:'#0F766E',c2:'#F59E0B',th:'dark',
   logo:SAMPLE_LOGO,photo:'',cover:'',logoUrl:'',photoUrl:'',coverUrl:'',
   qrMode:'link',host:'',customUrl:'',
-  badges:[],qr:{...DEFAULT_QR},bc:{tpl:'split'},ls:{size:'iphone',style:'brand'},example:true
+  badges:[],qr:{...DEFAULT_QR},bc:{tpl:'split',qrSide:'back',ring:true},ls:{size:'iphone',style:'brand'},example:true
 };
 const BLANK=()=>({...structuredClone(EXAMPLE),first:'',last:'',title:'',company:'',phone:'',whatsapp:'',email:'',website:'',location:'',bio:'',
   links:[['',''],['',''],['',''],['','']],socials:{li:'',ig:'',x:'',fb:'',gh:'',yt:'',tt:''},logo:'',photo:'',cover:'',c1:'#2F4BD8',c2:'#0EA5A4',
@@ -632,7 +640,7 @@ const BLANK=()=>({...structuredClone(EXAMPLE),first:'',last:'',title:'',company:
 let S;
 try{const raw=localStorage.getItem('qrcard-v1'); S=raw?JSON.parse(raw):null;}catch(e){S=null;}
 if(!S) S=structuredClone(EXAMPLE);
-S.qr={...DEFAULT_QR,...S.qr}; S.bc=S.bc||{tpl:'clean'}; S.ls=S.ls||{size:'iphone',style:'brand'};while(S.links.length<4) S.links.push(['','']);
+S.qr={...DEFAULT_QR,...S.qr}; S.bc={tpl:'split',qrSide:'back',ring:true,...S.bc}; S.ls=S.ls||{size:'iphone',style:'brand'};while(S.links.length<4) S.links.push(['','']);
 
 /* ---------- helpers ---------- */
 const get=(p)=>p.split('.').reduce((o,k)=>o==null?o:o[k],S);
@@ -646,13 +654,32 @@ function loadImg(src){if(!src) return Promise.resolve(null); if(imgCache.has(src
   const p=new Promise(res=>{const i=new Image();i.crossOrigin='anonymous';i.onload=()=>res(i);i.onerror=()=>res(null);i.src=src;}); imgCache.set(src,p); return p;}
 function download(blob,name){const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),5000);}
 const slug=()=>([S.first,S.last].filter(Boolean).join('-')||S.company||'card').toLowerCase().replace(/[^\w]+/g,'-').replace(/^-|-$/g,'')||'card';
-function fileToDataURL(file,max=900){return new Promise(res=>{
+/* Crop away a plain border (solid colour or transparent) so the logo fills its space on the card. */
+function trimCanvas(c){
+  const w=c.width,h=c.height; let d; try{d=c.getContext('2d').getImageData(0,0,w,h).data;}catch(e){return null;}
+  const at=i=>[d[i],d[i+1],d[i+2],d[i+3]], cs=[0,(w-1)*4,(h-1)*w*4,((h-1)*w+w-1)*4].map(at), ref=cs[0];
+  const near=(a,b)=>Math.abs(a[0]-b[0])+Math.abs(a[1]-b[1])+Math.abs(a[2]-b[2])+Math.abs(a[3]-b[3])<48;
+  if(!cs.every(q=>near(q,ref))) return null;
+  const clear=ref[3]<24; let x0=w,y0=h,x1=-1,y1=-1;
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){const i=(y*w+x)*4;
+    const ink=clear?d[i+3]>24:(Math.abs(d[i]-ref[0])+Math.abs(d[i+1]-ref[1])+Math.abs(d[i+2]-ref[2])>60);
+    if(ink){if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;}}
+  if(x1<0) return null;
+  const pad=Math.round(Math.max(x1-x0,y1-y0)*0.015); x0=Math.max(0,x0-pad); y0=Math.max(0,y0-pad); x1=Math.min(w-1,x1+pad); y1=Math.min(h-1,y1+pad);
+  if(x1-x0>w*0.96&&y1-y0>h*0.96) return null;
+  const o=document.createElement('canvas'); o.width=x1-x0+1; o.height=y1-y0+1; o.getContext('2d').drawImage(c,x0,y0,o.width,o.height,0,0,o.width,o.height); return o;
+}
+let logoPx=0;
+function fileToDataURL(file,max=900,trim=false){return new Promise(res=>{
   const r=new FileReader(); r.onload=async()=>{
-    const src=r.result; if(file.type==='image/svg+xml'){res(src);return;}
+    const src=r.result; if(file.type==='image/svg+xml'){if(trim==='logo') logoPx=Infinity; res(src);return;}
     const im=await loadImg(src); if(!im){res(src);return;}
-    const sc=Math.min(1,max/Math.max(im.width,im.height)); const c=document.createElement('canvas'); c.width=Math.round(im.width*sc); c.height=Math.round(im.height*sc);
-    c.getContext('2d').drawImage(im,0,0,c.width,c.height);
-    res(file.type==='image/jpeg'?c.toDataURL('image/jpeg',0.88):c.toDataURL('image/png'));
+    let c=document.createElement('canvas'); c.width=im.naturalWidth; c.height=im.naturalHeight; c.getContext('2d').drawImage(im,0,0);
+    if(trim){const t=trimCanvas(c); if(t) c=t;}
+    const sc=Math.min(1,max/Math.max(c.width,c.height));
+    if(sc<1){const o=document.createElement('canvas'); o.width=Math.round(c.width*sc); o.height=Math.round(c.height*sc); const ox=o.getContext('2d'); ox.imageSmoothingQuality='high'; ox.drawImage(c,0,0,o.width,o.height); c=o;}
+    if(trim==='logo') logoPx=Math.min(c.width,c.height);
+    res(file.type==='image/jpeg'&&!trim?c.toDataURL('image/jpeg',0.92):c.toDataURL('image/png'));
   }; r.readAsDataURL(file);});}
 async function toRasterDataURL(src,max=400,fmt='image/png'){const im=await loadImg(src); if(!im) return '';
   const w=im.naturalWidth||max,h=im.naturalHeight||max; const sc=Math.min(1,max/Math.max(w,h)); const c=document.createElement('canvas'); c.width=Math.max(1,Math.round(w*sc)); c.height=Math.max(1,Math.round(h*sc));
@@ -766,6 +793,8 @@ function syncInputs(){
   $('#exampleBar').hidden=!S.example;
   const th=(id,src)=>{$(id).innerHTML=src?`<img src="${src}" alt="">`:'';};
   th('#logoThumb',S.logo||S.logoUrl); th('#photoThumb',S.photo||S.photoUrl); th('#coverThumb',S.cover||S.coverUrl);
+  const split=S.bc.tpl==='split'; $('#f-qrSide').hidden=!split; $('#ringWrap').hidden=!split;
+  $('#logoHint').textContent=(S.logo&&logoPx&&logoPx<700)?`This logo is only ${logoPx} px. It will look soft in print. Upload the original file (SVG, or PNG at least 1000 px) for the sharpest card.`:'Click or drop a PNG, JPG or SVG. For sharp printing use the original file: SVG, or PNG at least 1000 px wide. Plain borders are trimmed automatically.';
   const bs=S.badges||[]; th('#badgeThumb',bs[0]); $('#badgeHint').textContent=bs.length?`${bs.length} of 3 added. Shown on the split-panel business card.`:'Up to 3, for example SAP Partner, CMMI or ISO 27001. Shown on the split-panel business card.';
   renderPresets();
 }
@@ -775,12 +804,12 @@ document.addEventListener('input',e=>{const el=e.target; const k=el.dataset&&el.
   if(el.type==='text'&&el.maxLength===7){ if(!v.startsWith('#')) v='#'+v; if(!isHex(v)) return; v=v.toUpperCase(); }
   set(k,v); if(k==='logoUrl') refreshPalette(); syncInputs(); update();
 });
-document.addEventListener('change',e=>{const el=e.target; if(el.tagName==='SELECT'&&el.dataset.k){set(el.dataset.k,el.value);update();}});
+document.addEventListener('change',e=>{const el=e.target; if(el.tagName==='SELECT'&&el.dataset.k){set(el.dataset.k,el.value);syncInputs();update();}});
 document.addEventListener('click',e=>{const b=e.target.closest('[data-group] [data-v]'); if(!b) return; const g=b.closest('[data-group]').dataset.group; set(g,b.dataset.v); if(g==='qr.grad'&&b.dataset.v!=='none'&&S.qr.d1===S.qr.d2) S.qr.d2=vcReadable(S.c2,'#ffffff',4.5).toUpperCase(); syncInputs(); update();});
 
 function bindImage(kind,dropSel,fileSel){
   const drop=$(dropSel),file=$(fileSel);
-  const take=async f=>{if(!f||!f.type.startsWith('image/')) return; S[kind]=await fileToDataURL(f,kind==='cover'?1400:900); S.example=false; if(kind==='logo'){await refreshPalette(); applyLogoColours();} syncInputs(); update();};
+  const take=async f=>{if(!f||!f.type.startsWith('image/')) return; S[kind]=await fileToDataURL(f,kind==='cover'?1800:kind==='logo'?2000:1200,kind==='logo'?'logo':false); S.example=false; if(kind==='logo'){await refreshPalette(); applyLogoColours();} syncInputs(); update();};
   file.addEventListener('change',()=>take(file.files[0]));
   drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('over');});
   drop.addEventListener('dragleave',()=>drop.classList.remove('over'));
@@ -789,7 +818,7 @@ function bindImage(kind,dropSel,fileSel){
 {
   const drop=$('#badgeDrop'),file=$('#badgeFile');
   const take=async files=>{const imgs=[...files].filter(f=>f.type.startsWith('image/')); if(!imgs.length) return;
-    const urls=await Promise.all(imgs.map(f=>fileToDataURL(f,500))); S.badges=[...(S.badges||[]),...urls].slice(-3); S.example=false; syncInputs(); update();};
+    const urls=await Promise.all(imgs.map(f=>fileToDataURL(f,1000,true))); S.badges=[...(S.badges||[]),...urls].slice(-3); S.example=false; syncInputs(); update();};
   file.addEventListener('change',()=>{take(file.files);file.value='';});
   drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('over');});
   drop.addEventListener('dragleave',()=>drop.classList.remove('over'));
@@ -861,29 +890,61 @@ async function drawLock(cv){
   x.fillStyle=fg; x.font='700 46px "Plus Jakarta Sans", system-ui, sans-serif'; x.fillText(CAPTION(),W/2,y);
   const sm=[S.phone,stripProto(S.website)].filter(Boolean).join('   ·   '); if(sm){x.fillStyle=sub; fit(x,sm,W*0.84,36,'500'); x.fillText(sm,W/2,y+62);}
 }
-async function drawBC(cv){
-  const W=1050,H=600; cv.width=W; cv.height=H; const x=cv.getContext('2d'); const t=S.bc.tpl;
+/* ---------- business card (front + back) ----------
+   Everything is laid out in 1050×600 card units (3.5×2 in at 300 dpi) and rendered at any scale,
+   so the preview (2×), the PNGs (3× = 900 dpi) and the print PDF (2× + bleed = 600 dpi) are all sharp. */
+const BC_W=1050, BC_H=600;
+let RS=1; // current render scale, so QR images are generated at full resolution
+const POP=(w,s)=>`${w} ${s}px Poppins, "Plus Jakarta Sans", system-ui, sans-serif`;
+function fitP(x,txt,max,size,weight='400'){let s=size; do{x.font=POP(weight,s); s-=0.5;}while(x.measureText(txt).width>max&&s>8); return s+0.5;}
+let fontsLoaded=null;
+function cardFonts(){ if(!fontsLoaded&&document.fonts) fontsLoaded=Promise.all(['400','500','600','700'].map(w=>document.fonts.load(POP(w,40)).catch(()=>{}))); return fontsLoaded||Promise.resolve(); }
+const qrOnBack=()=>S.bc.tpl==='split'&&S.bc.qrSide!=='front';
+const qrPx=Q=>Math.round(Q*Math.max(2,RS));
+async function drawBC(cv,scale=1,side='front'){
+  await cardFonts();
+  const W=BC_W,H=BC_H; cv.width=Math.round(W*scale); cv.height=Math.round(H*scale);
+  const x=cv.getContext('2d'); x.setTransform(scale,0,0,scale,0,0); x.imageSmoothingEnabled=true; x.imageSmoothingQuality='high'; RS=scale;
+  if(side==='back') return drawBack(x,W,H);
+  const t=S.bc.tpl;
+  if(t==='split') return drawSplit(x,W,H);
   let fg='#121216', sub='#55555f', acc=vcReadable(S.c1,'#ffffff',4.5);
   if(t==='bold'){const g=x.createLinearGradient(0,0,W,H);g.addColorStop(0,S.c1);g.addColorStop(1,vcMix(S.c1,'#000000',0.45));x.fillStyle=g;x.fillRect(0,0,W,H);
     const on=vcOn(S.c1); fg=on; sub=on==='#ffffff'?'rgba(255,255,255,.8)':'rgba(0,0,0,.7)'; acc=on==='#ffffff'?vcMix(S.c2,'#ffffff',0.15):vcReadable(S.c2,S.c1,3);}
   else if(t==='dark'){x.fillStyle='#141417';x.fillRect(0,0,W,H);fg='#F4F4F5';sub='#A1A1AA';acc=vcReadable(S.c1,'#141417',4.5);
     const g=x.createRadialGradient(W,0,0,W,0,W*0.7);g.addColorStop(0,S.c1+'55');g.addColorStop(1,S.c1+'00');x.fillStyle=g;x.fillRect(0,0,W,H);}
   else{x.fillStyle='#ffffff';x.fillRect(0,0,W,H);x.fillStyle=S.c1;x.fillRect(0,0,16,H);x.fillStyle=S.c2;x.fillRect(0,H-120,16,120);}
-  if(t==='split') return drawSplit(x,W,H);
   const L=70, logo=await loadImg(S.logo||S.logoUrl); let y=60;
   if(logo){ if(t!=='clean'){rr(x,L-10,y-10,110,110,22);x.fillStyle='rgba(255,255,255,.95)';x.fill();} contain(x,logo,L,y,90,90); }
   x.textAlign='left'; x.textBaseline='alphabetic';
-  y=logo?240:150; x.fillStyle=fg; fit(x,FULLNAME(),560,52,'800'); x.fillText(FULLNAME(),L,y);
-  if(S.title){x.fillStyle=acc; fit(x,S.title,560,27,'700'); x.fillText(S.title,L,y+44);}
-  if(S.company){x.fillStyle=sub; fit(x,S.company,560,24,'600'); x.fillText(S.company,L,y+80);}
+  y=logo?240:150; x.fillStyle=fg; fitP(x,FULLNAME(),560,50,'700'); x.fillText(FULLNAME(),L,y);
+  if(S.title){x.fillStyle=acc; fitP(x,S.title,560,27,'600'); x.fillText(S.title,L,y+44);}
+  if(S.company){x.fillStyle=sub; fitP(x,S.company,560,23,'500'); x.fillText(S.company,L,y+80);}
   const lines=[S.phone,S.email,stripProto(S.website),S.location].filter(Boolean).slice(0,4); let ly=H-56-(lines.length-1)*36;
-  lines.forEach(s=>{x.fillStyle=acc;x.beginPath();x.arc(L+5,ly-7,5,0,7);x.fill();x.fillStyle=sub;fit(x,s,520,22,'500');x.fillText(s,L+22,ly);ly+=36;});
+  lines.forEach(s=>{x.fillStyle=acc;x.beginPath();x.arc(L+5,ly-7,5,0,7);x.fill();x.fillStyle=sub;fitP(x,s,520,21,'400');x.fillText(s,L+22,ly);ly+=36;});
   const Q=320,P=16,T=Q+P*2,tx=W-T-50,ty=(H-T)/2-18;
   rr(x,tx,ty,T,T,26); x.fillStyle=S.qr.bgT?'#FFFFFF':S.qr.bg; if(t==='clean'){x.strokeStyle='#e7e7ea';x.lineWidth=2;x.fill();x.stroke();}else x.fill();
-  const qi=await qrImage(Q*2); x.drawImage(qi,tx+P,ty+P,Q,Q);
-  x.textAlign='center'; x.fillStyle=sub; x.font='600 20px "Plus Jakarta Sans", system-ui, sans-serif'; x.fillText(CAPTION(),tx+T/2,ty+T+38);
+  x.drawImage(await qrImage(qrPx(Q)),tx+P,ty+P,Q,Q);
+  x.textAlign='center'; x.fillStyle=sub; x.font=POP('500',19); x.fillText(CAPTION(),tx+T/2,ty+T+38);
 }
-/* Split-panel design: brand panel on the left (logo, company, QR), details on the right with an icon rail. */
+/* Back: brand colour with the logo; on the split design it can also carry the QR code. */
+async function drawBack(x,W,H){
+  const t=S.bc.tpl, bg=t==='clean'?'#FFFFFF':t==='dark'?'#141417':S.c1;
+  x.fillStyle=bg; x.fillRect(0,0,W,H);
+  if(t==='bold'){const g=x.createLinearGradient(0,0,W,H);g.addColorStop(0,S.c1);g.addColorStop(1,vcMix(S.c1,'#000000',0.45));x.fillStyle=g;x.fillRect(0,0,W,H);}
+  const logo=await loadImg(S.logo||S.logoUrl), cap=vcContrast(S.c2,bg)>=3?S.c2:vcOn(bg);
+  const name=()=>{x.textAlign='center';x.fillStyle=cap;};
+  if(qrOnBack()){
+    if(logo) contain(x,logo,300-170,300-170,340,340); else if(S.company){name(); fitP(x,S.company,440,44,'600'); x.fillText(S.company,300,315);}
+    x.fillStyle=vcMix(bg,cap,0.35); x.fillRect(565,150,2,300);
+    const Q=290,P=16,T=Q+P*2,tx=W-T-110,ty=(H-T)/2-18;
+    rr(x,tx,ty,T,T,22); x.fillStyle=S.qr.bgT?'#FFFFFF':S.qr.bg; x.fill();
+    x.drawImage(await qrImage(qrPx(Q)),tx+P,ty+P,Q,Q);
+    name(); x.font=POP('500',21); x.fillText(CAPTION(),tx+T/2,ty+T+40);
+  } else if(logo) contain(x,logo,W/2-205,H/2-205,410,410);
+  else if(S.company){name(); fitP(x,S.company,800,56,'600'); x.fillText(S.company,W/2,H/2+18);}
+}
+/* Split design: brand panel left, details right with an icon rail (modelled on a classic corporate card). */
 const GLYPH={
   phone:VC_IC.phone.match(/d="([^"]+)"/)[1],
   mail:'M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z M22 7l-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7',
@@ -894,47 +955,73 @@ const GLYPH={
 function glyph(x,name,cx,cy,size,color,lw=2){x.save();const s=size/24;x.translate(cx-size/2,cy-size/2);x.scale(s,s);x.strokeStyle=color;x.lineWidth=lw;x.lineCap='round';x.lineJoin='round';x.stroke(new Path2D(GLYPH[name]));x.restore();}
 function wrap(x,text,maxW){const out=[];let line='';String(text).split(/\s+/).forEach(w=>{const t=line?line+' '+w:w;if(x.measureText(t).width>maxW&&line){out.push(line);line=w;}else line=t;});if(line)out.push(line);return out;}
 async function drawSplit(x,W,H){
-  const navy=S.c1, yel=S.c2, LW=470, font=(w,s)=>`${w} ${s}px "Plus Jakarta Sans", system-ui, sans-serif`;
+  const navy=S.c1, yel=S.c2, LW=515, cx=245, ink=vcContrast(navy,'#FFFFFF')>=7?navy:'#15151A', body='#1B1B21';
   x.fillStyle=navy; x.fillRect(0,0,LW,H); x.fillStyle='#FFFFFF'; x.fillRect(LW,0,W-LW,H);
-  // left: logo, company, QR
-  const logo=await loadImg(S.logo||S.logoUrl); if(logo) contain(x,logo,LW/2-80,20,160,160);
+  const logo=await loadImg(S.logo||S.logoUrl);
   const words=String(S.company||'').trim().split(/\s+/).filter(Boolean), first=words[0]||'', rest=words.slice(1).join(' ');
-  x.textAlign='center'; x.textBaseline='alphabetic'; x.fillStyle=yel;
-  if(first){fit(x,first,400,70,'800'); x.fillText(first,LW/2,242);}
-  if(rest){fit(x,rest,420,21,'600'); x.fillText(rest,LW/2,272);}
-  const Q=232,P=9,T=Q+P*2,tx=LW/2-T/2,ty=292;
-  rr(x,tx,ty,T,T,16); x.fillStyle=S.qr.bgT?'#FFFFFF':S.qr.bg; x.fill();
-  x.drawImage(await qrImage(Q*3),tx+P,ty+P,Q,Q);
-  x.fillStyle='rgba(255,255,255,.78)'; x.font=font('600',17); x.fillText(CAPTION(),LW/2,ty+T+25);
-  // right top: name, title, badges
+  const ring=(cy,r)=>{if(S.bc.ring===false) return; x.beginPath(); x.arc(cx,cy,r,0,Math.PI*2); x.strokeStyle=yel; x.lineWidth=4; x.stroke();};
+  x.textAlign='center'; x.textBaseline='alphabetic';
+  if(qrOnBack()){
+    if(logo){contain(x,logo,cx-136,195-136,272,272); ring(195,160);}
+    x.fillStyle=yel;
+    if(first){fitP(x,first,400,112,'500'); x.fillText(first,cx,472);}
+    if(rest){fitP(x,rest,405,26,'400'); x.fillText(rest,cx,506);}
+  } else {
+    if(logo){contain(x,logo,cx-74,22,148,148); ring(96,88);}
+    x.fillStyle=yel;
+    if(first){fitP(x,first,400,64,'500'); x.fillText(first,cx,240);}
+    if(rest){fitP(x,rest,405,19,'400'); x.fillText(rest,cx,266);}
+    const Q=232,P=9,T=Q+P*2,tx=cx-T/2,ty=284;
+    rr(x,tx,ty,T,T,14); x.fillStyle=S.qr.bgT?'#FFFFFF':S.qr.bg; x.fill();
+    x.drawImage(await qrImage(qrPx(Q)),tx+P,ty+P,Q,Q);
+    x.fillStyle='rgba(255,255,255,.82)'; x.font=POP('500',16); x.fillText(CAPTION(),cx,ty+T+24);
+  }
+  // name, title, badges
   const badges=(await Promise.all((S.badges||[]).slice(0,3).map(loadImg))).filter(Boolean);
-  const nameW=badges.length?310:470, ink=vcContrast(navy,'#FFFFFF')>=7?navy:'#15151A';
-  glyph(x,'user',LW+50,82,44,ink,2.2);
-  x.textAlign='left'; x.fillStyle=ink; fit(x,FULLNAME(),nameW,56,'800'); x.fillText(FULLNAME(),LW+84,100);
-  if(S.title){x.fillStyle='#1E1E24'; fit(x,S.title,nameW+20,31,'500'); x.fillText(S.title,LW+84,146);}
-  if(badges.length===1) contain(x,badges[0],W-195,14,180,170);
-  else if(badges.length===2){contain(x,badges[0],W-195,12,180,82);contain(x,badges[1],W-195,100,180,82);}
-  else if(badges.length===3){contain(x,badges[0],W-200,12,92,74);contain(x,badges[1],W-104,12,92,74);contain(x,badges[2],W-175,92,140,92);}
-  // grey band + yellow icon rail
-  const bandY=196,bandB=H-40; x.fillStyle='#E4E4E6'; x.fillRect(LW,bandY,W-LW,bandB-bandY);
-  rr(x,LW-30,bandY-12,84,bandB-bandY+24,42); x.fillStyle=yel; x.fill();
-  const TX=LW+76, maxW=W-TX-26, rows=[];
+  if(badges.length===1) contain(x,badges[0],W-172,22,150,150);
+  else if(badges.length===2){contain(x,badges[0],816,32,106,66);contain(x,badges[1],926,30,106,70);}
+  else if(badges.length===3){contain(x,badges[0],816,36,100,60);contain(x,badges[1],920,30,108,70);contain(x,badges[2],930,104,96,88);}
+  const nameMax=badges.length===1?285:badges.length===3?340:450;
+  glyph(x,'user',553,142,38,ink,2);
+  x.textAlign='left'; x.fillStyle=ink; fitP(x,FULLNAME(),nameMax,46,'700'); x.fillText(FULLNAME(),580,158);
+  if(S.title){x.fillStyle=body; fitP(x,S.title,nameMax+5,30,'400'); x.fillText(S.title,578,189);}
+  // details band + rail
+  const bandY=198,bandB=515; x.fillStyle='#E6E6E6'; x.fillRect(LW,bandY,W-LW,bandB-bandY);
+  rr(x,472,bandY+2,86,bandB-bandY-4,43); x.fillStyle=yel; x.fill();
+  const TX=565, maxW=W-TX-22, rows=[];
   if(S.phone) rows.push({ic:'phone',label:'Contact No',lines:[S.phone]});
   if(S.email) rows.push({ic:'mail',label:'Mail',lines:[S.email]});
-  if(S.company||S.location){x.font=font('500',19); rows.push({ic:'pin',label:S.company||'Address',lines:S.location?wrap(x,S.location,maxW).slice(0,3):[],small:true});}
-  if(S.website) rows.push({ic:'globe',lines:[String(S.website).trim().replace(/^https?:\/\//i,'').replace(/\/$/,'')],link:true});
-  const hOf=r=>(r.label?32:0)+r.lines.length*(r.small?24:30), gap=20;
-  const total=rows.reduce((a,r)=>a+hOf(r),0)+gap*(rows.length-1); let y=bandY+Math.max(14,(bandB-bandY-total)/2);
+  if(S.company||S.location){x.font=POP('400',16.5); rows.push({ic:'pin',label:S.company||'Address',lines:S.location?wrap(x,S.location,maxW).slice(0,3):[],addr:true});}
+  if(S.website) rows.push({ic:'globe',lines:[String(S.website).trim().replace(/^https?:\/\//i,'').replace(/\/$/,'')],web:true});
+  const hOf=r=>r.web?0:r.addr?(r.lines.length?26+18*(r.lines.length-1):0):31, gap=33;
+  const total=rows.reduce((a,r)=>a+hOf(r),0)+gap*Math.max(0,rows.length-1);
+  let y=bandY+(bandB-bandY-(total+21))/2+16;
+  const iconC=vcContrast(yel,'#FFFFFF')>=1.6?yel:navy;
   rows.forEach(r=>{
-    const cy=y+(r.label?12:14); x.fillStyle='#FFFFFF'; x.beginPath(); x.arc(LW+12,cy,21,0,Math.PI*2); x.fill(); glyph(x,r.ic,LW+12,cy,22,yel===('#FFFFFF')?navy:vcReadable(yel,'#FFFFFF',2.2),2.4);
-    let ty2=y+22;
-    if(r.label){x.fillStyle=ink; fit(x,r.label,maxW,25,'800'); x.fillText(r.label,TX,ty2); ty2+=32;}
-    r.lines.forEach(l=>{x.fillStyle='#26262C'; if(r.small) x.font=font('500',19); else fit(x,l,maxW,r.link?27:25,'500');
-      if(r.link){fit(x,l,maxW,27,'500'); x.fillStyle=ink;}
-      x.fillText(l,TX,r.label?ty2-6:ty2);
-      if(r.link){const w=x.measureText(l).width; x.fillRect(TX,ty2+2,w,2);} ty2+=r.small?24:30;});
+    x.fillStyle='#FFFFFF'; x.beginPath(); x.arc(515,y-7,16,0,Math.PI*2); x.fill(); glyph(x,r.ic,515,y-7,18,iconC,2.4);
+    if(r.web){x.fillStyle=ink; fitP(x,r.lines[0],maxW,21,'400'); x.fillText(r.lines[0],TX,y); x.fillRect(TX,y+4,x.measureText(r.lines[0]).width,1.5);}
+    else if(r.addr){x.fillStyle=ink; fitP(x,r.label,maxW,20,'700'); x.fillText(r.label,TX,y);
+      x.fillStyle=body; x.font=POP('400',16.5); r.lines.forEach((l,i)=>x.fillText(l,TX,y+26+18*i));}
+    else{x.fillStyle=ink; x.font=POP('700',21); x.fillText(r.label,TX,y); x.fillStyle=body; fitP(x,r.lines[0],maxW,21,'400'); x.fillText(r.lines[0],TX,y+31);}
     y+=hOf(r)+gap;
   });
+}
+/* Exports */
+async function bcCanvas(side,scale){const c=document.createElement('canvas'); await drawBC(c,scale,side); return c;}
+function withBleed(c,b){ // stretch the edge pixels outward so backgrounds run past the cut line
+  const w=c.width,h=c.height,o=document.createElement('canvas'); o.width=w+2*b; o.height=h+2*b; const x=o.getContext('2d');
+  x.drawImage(c,b,b);
+  x.drawImage(c,0,0,1,h,0,b,b,h); x.drawImage(c,w-1,0,1,h,b+w,b,b,h); x.drawImage(c,0,0,w,1,b,0,w,b); x.drawImage(c,0,h-1,w,1,b,b+h,w,b);
+  x.drawImage(c,0,0,1,1,0,0,b,b); x.drawImage(c,w-1,0,1,1,b+w,0,b,b); x.drawImage(c,0,h-1,1,1,0,b+h,b,b); x.drawImage(c,w-1,h-1,1,1,b+w,b+h,b,b);
+  return o;}
+async function printPDF(){
+  if(!window.jspdf) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+  const doc=new window.jspdf.jsPDF({orientation:'landscape',unit:'in',format:[3.75,2.25],compress:true});
+  const sides=['front','back'];
+  for(let i=0;i<sides.length;i++){ if(i) doc.addPage([3.75,2.25],'landscape');
+    const c=withBleed(await bcCanvas(sides[i],2),75); doc.addImage(c.toDataURL('image/png'),'PNG',0,0,3.75,2.25,undefined,'FAST'); }
+  doc.setProperties({title:FULLNAME()+' business card'});
+  return doc.output('blob');
 }
 const toBlob=cv=>new Promise(r=>cv.toBlob(r,'image/png'));
 
@@ -973,7 +1060,7 @@ async function run(){
       else qrPreview.update(qrOpts(payload,300));
       renderChecks();
       if(tab==='lock') await drawLock($('#lockCanvas'));
-      if(tab==='bc') await drawBC($('#bcCanvas'));
+      if(tab==='bc'){ await drawBC($('#bcCanvas'),2,'front'); await drawBC($('#bcBack'),2,'back'); }
     }
   }catch(e){console.error(e);}
   busy=false; if(again){again=false;run();}
@@ -989,17 +1076,21 @@ $$('[data-dl]').forEach(b=>b.addEventListener('click',async()=>{
     if(k==='qrpng') download(await qrBlob(1200,'png'),n+'-qr.png');
     if(k==='qrsvg') download(await qrBlob(1000,'svg'),n+'-qr.svg');
     if(k==='lock'){const c=document.createElement('canvas');await drawLock(c);download(await toBlob(c),n+'-lock-screen.png');}
-    if(k==='bc'){const c=document.createElement('canvas');await drawBC(c);download(await toBlob(c),n+'-business-card.png');}
+    if(k==='bcfront') download(await toBlob(await bcCanvas('front',3)),n+'-card-front.png');
+    if(k==='bcback') download(await toBlob(await bcCanvas('back',3)),n+'-card-back.png');
+    if(k==='pdf') download(await printPDF(),n+'-business-card-print.pdf');
     if(k==='vcf') download(new Blob([await vcfText()],{type:'text/vcard'}),n+'.vcf');
     if(k==='page') download(new Blob([await standaloneHTML()],{type:'text/html'}),n+'-card.html');
     if(k==='zip'){
       if(!window.JSZip) await loadScript('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js');
-      const z=new JSZip(); const c1=document.createElement('canvas'),c2=document.createElement('canvas'); await drawLock(c1); await drawBC(c2);
-      z.file(n+'-lock-screen.png',await toBlob(c1)); z.file(n+'-business-card.png',await toBlob(c2));
+      const z=new JSZip(); const c1=document.createElement('canvas'); await drawLock(c1);
+      z.file(n+'-lock-screen.png',await toBlob(c1));
+      z.file(n+'-card-front.png',await toBlob(await bcCanvas('front',3))); z.file(n+'-card-back.png',await toBlob(await bcCanvas('back',3)));
+      z.file(n+'-business-card-print.pdf',await printPDF());
       z.file(n+'-qr.png',await qrBlob(1200,'png')); z.file(n+'-qr.svg',await qrBlob(1000,'svg'));
       z.file(n+'.vcf',await vcfText()); z.file(n+'-card.html',await standaloneHTML());
       z.file('qr-contents.txt',await qrPayload());
-      z.file('README.txt',['Your digital business card','','- '+n+'-lock-screen.png: set as your phone lock screen so people can scan it.','- '+n+'-business-card.png: print-ready (3.5 x 2 in at 300 dpi).','- '+n+'-qr.png / .svg: the QR code on its own (use the SVG for print).','- '+n+'.vcf: your contact file. Opening it adds you to contacts.','- '+n+'-card.html: your card page with images included. Works offline and can be hosted anywhere.','- qr-contents.txt: exactly what the QR code contains.','','Test the QR with two different phones before printing.'].join('\n'));
+      z.file('README.txt',['Your digital business card','','- '+n+'-lock-screen.png: set as your phone lock screen so people can scan it.','- '+n+'-business-card-print.pdf: send this to the printer. Front and back, 3.75 x 2.25 in including 0.125 in bleed (trims to 3.5 x 2 in), 600 dpi.','- '+n+'-card-front.png / -card-back.png: 3150 x 1800 px (900 dpi) for sharing or other print services.','- '+n+'-qr.png / .svg: the QR code on its own (use the SVG for print).','- '+n+'.vcf: your contact file. Opening it adds you to contacts.','- '+n+'-card.html: your card page with images included. Works offline and can be hosted anywhere.','- qr-contents.txt: exactly what the QR code contains.','','Test the QR with two different phones before printing.'].join('\n'));
       download(await z.generateAsync({type:'blob'}),n+'-business-card.zip');
     }
   }catch(e){console.error(e);toast('Download failed. Try again.');}
