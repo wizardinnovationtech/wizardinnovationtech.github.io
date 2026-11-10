@@ -1,5 +1,7 @@
 # QR Card Studio
 
+Live at **https://wizardinnovationtech.github.io/**
+
 One file (`index.html`) that is both:
 
 - **The editor**: fill in your details, upload a logo, take colours from it, style the QR code, and download a lock-screen image, a printable business card, the QR (PNG/SVG), a contact file (.vcf), a stand-alone card page (.html) or everything as a .zip.
