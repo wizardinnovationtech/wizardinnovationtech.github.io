@@ -226,7 +226,7 @@ canvas.pv.tall{max-height:560px;width:auto}
             <label class="f"><span>Email</span><input id="f-email" type="email" data-k="email"></label>
             <label class="f"><span>Website</span><input id="f-web" type="url" data-k="website" placeholder="yourcompany.com"></label>
           </div>
-          <label class="f"><span>Location</span><input id="f-loc" type="text" data-k="location" placeholder="City, Country"></label>
+          <label class="f"><span>Address or location</span><input id="f-loc" type="text" data-k="location" placeholder="Office address, or just City, Country"></label>
           <label class="f"><span>Short bio</span><textarea id="f-bio" data-k="bio" maxlength="280" placeholder="One or two lines about what you do."></textarea></label>
           <p class="hint">Everything here travels inside the QR code. Shorter text makes a simpler code that scans faster.</p>
         </div>
@@ -287,6 +287,12 @@ canvas.pv.tall{max-height:560px;width:auto}
             </label>
           </div>
           <div class="btns"><button class="btn sm" type="button" id="photoRemove">Remove photo</button><button class="btn sm" type="button" id="coverRemove">Remove cover</button></div>
+          <label class="drop" id="badgeDrop" for="badgeFile">
+            <div class="thumb" id="badgeThumb"></div>
+            <div class="txt"><b>Certification badges</b><span class="hint" id="badgeHint">Up to 3, for example SAP Partner, CMMI or ISO 27001. Shown on the split-panel business card.</span></div>
+            <button class="btn sm" type="button" id="badgeRemove">Remove</button>
+            <input type="file" id="badgeFile" accept="image/*" multiple>
+          </label>
           <details>
             <summary class="hint" style="cursor:pointer"><b>Show images on the scanned card page</b> (optional public image links)</summary>
             <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
@@ -395,7 +401,7 @@ canvas.pv.tall{max-height:560px;width:auto}
         <div data-pane="bc" hidden>
           <div class="stage"><canvas class="pv" id="bcCanvas"></canvas></div>
           <div class="opts" style="padding-top:12px">
-            <select id="f-bc" data-k="bc.tpl" aria-label="Card design"><option value="clean">Clean white</option><option value="bold">Bold colour</option><option value="dark">Dark</option></select>
+            <select id="f-bc" data-k="bc.tpl" aria-label="Card design"><option value="split">Split panel (logo left, details right)</option><option value="clean">Clean white</option><option value="bold">Bold colour</option><option value="dark">Dark</option></select>
           </div>
         </div>
         <div class="checks" id="checks"></div>
@@ -617,7 +623,7 @@ const EXAMPLE={
   c1:'#0F766E',c2:'#F59E0B',th:'dark',
   logo:SAMPLE_LOGO,photo:'',cover:'',logoUrl:'',photoUrl:'',coverUrl:'',
   qrMode:'link',host:'',customUrl:'',
-  qr:{...DEFAULT_QR},bc:{tpl:'clean'},ls:{size:'iphone',style:'brand'},example:true
+  badges:[],qr:{...DEFAULT_QR},bc:{tpl:'split'},ls:{size:'iphone',style:'brand'},example:true
 };
 const BLANK=()=>({...structuredClone(EXAMPLE),first:'',last:'',title:'',company:'',phone:'',whatsapp:'',email:'',website:'',location:'',bio:'',
   links:[['',''],['',''],['',''],['','']],socials:{li:'',ig:'',x:'',fb:'',gh:'',yt:'',tt:''},logo:'',photo:'',cover:'',c1:'#2F4BD8',c2:'#0EA5A4',
@@ -760,6 +766,7 @@ function syncInputs(){
   $('#exampleBar').hidden=!S.example;
   const th=(id,src)=>{$(id).innerHTML=src?`<img src="${src}" alt="">`:'';};
   th('#logoThumb',S.logo||S.logoUrl); th('#photoThumb',S.photo||S.photoUrl); th('#coverThumb',S.cover||S.coverUrl);
+  const bs=S.badges||[]; th('#badgeThumb',bs[0]); $('#badgeHint').textContent=bs.length?`${bs.length} of 3 added. Shown on the split-panel business card.`:'Up to 3, for example SAP Partner, CMMI or ISO 27001. Shown on the split-panel business card.';
   renderPresets();
 }
 document.addEventListener('input',e=>{const el=e.target; const k=el.dataset&&el.dataset.k; if(!k) return;
@@ -778,6 +785,16 @@ function bindImage(kind,dropSel,fileSel){
   drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('over');});
   drop.addEventListener('dragleave',()=>drop.classList.remove('over'));
   drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('over');take(e.dataTransfer.files[0]);});
+}
+{
+  const drop=$('#badgeDrop'),file=$('#badgeFile');
+  const take=async files=>{const imgs=[...files].filter(f=>f.type.startsWith('image/')); if(!imgs.length) return;
+    const urls=await Promise.all(imgs.map(f=>fileToDataURL(f,500))); S.badges=[...(S.badges||[]),...urls].slice(-3); S.example=false; syncInputs(); update();};
+  file.addEventListener('change',()=>{take(file.files);file.value='';});
+  drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('over');});
+  drop.addEventListener('dragleave',()=>drop.classList.remove('over'));
+  drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('over');take(e.dataTransfer.files);});
+  $('#badgeRemove').addEventListener('click',e=>{e.preventDefault();S.badges=[];syncInputs();update();});
 }
 bindImage('logo','#logoDrop','#logoFile'); bindImage('photo','#photoDrop','#photoFile'); bindImage('cover','#coverDrop','#coverFile');
 $('#logoRemove').addEventListener('click',e=>{e.preventDefault();S.logo='';S.logoUrl='';refreshPalette();syncInputs();update();});
@@ -852,6 +869,7 @@ async function drawBC(cv){
   else if(t==='dark'){x.fillStyle='#141417';x.fillRect(0,0,W,H);fg='#F4F4F5';sub='#A1A1AA';acc=vcReadable(S.c1,'#141417',4.5);
     const g=x.createRadialGradient(W,0,0,W,0,W*0.7);g.addColorStop(0,S.c1+'55');g.addColorStop(1,S.c1+'00');x.fillStyle=g;x.fillRect(0,0,W,H);}
   else{x.fillStyle='#ffffff';x.fillRect(0,0,W,H);x.fillStyle=S.c1;x.fillRect(0,0,16,H);x.fillStyle=S.c2;x.fillRect(0,H-120,16,120);}
+  if(t==='split') return drawSplit(x,W,H);
   const L=70, logo=await loadImg(S.logo||S.logoUrl); let y=60;
   if(logo){ if(t!=='clean'){rr(x,L-10,y-10,110,110,22);x.fillStyle='rgba(255,255,255,.95)';x.fill();} contain(x,logo,L,y,90,90); }
   x.textAlign='left'; x.textBaseline='alphabetic';
@@ -864,6 +882,59 @@ async function drawBC(cv){
   rr(x,tx,ty,T,T,26); x.fillStyle=S.qr.bgT?'#FFFFFF':S.qr.bg; if(t==='clean'){x.strokeStyle='#e7e7ea';x.lineWidth=2;x.fill();x.stroke();}else x.fill();
   const qi=await qrImage(Q*2); x.drawImage(qi,tx+P,ty+P,Q,Q);
   x.textAlign='center'; x.fillStyle=sub; x.font='600 20px "Plus Jakarta Sans", system-ui, sans-serif'; x.fillText(CAPTION(),tx+T/2,ty+T+38);
+}
+/* Split-panel design: brand panel on the left (logo, company, QR), details on the right with an icon rail. */
+const GLYPH={
+  phone:VC_IC.phone.match(/d="([^"]+)"/)[1],
+  mail:'M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z M22 7l-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7',
+  pin:'M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z M15 10a3 3 0 1 1-6 0a3 3 0 1 1 6 0',
+  globe:'M22 12a10 10 0 1 1-20 0a10 10 0 1 1 20 0 M12 2a14.5 14.5 0 0 0 0 20a14.5 14.5 0 0 0 0-20 M2 12h20',
+  user:'M22 12a10 10 0 1 1-20 0a10 10 0 1 1 20 0 M15 10a3 3 0 1 1-6 0a3 3 0 1 1 6 0 M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662'
+};
+function glyph(x,name,cx,cy,size,color,lw=2){x.save();const s=size/24;x.translate(cx-size/2,cy-size/2);x.scale(s,s);x.strokeStyle=color;x.lineWidth=lw;x.lineCap='round';x.lineJoin='round';x.stroke(new Path2D(GLYPH[name]));x.restore();}
+function wrap(x,text,maxW){const out=[];let line='';String(text).split(/\s+/).forEach(w=>{const t=line?line+' '+w:w;if(x.measureText(t).width>maxW&&line){out.push(line);line=w;}else line=t;});if(line)out.push(line);return out;}
+async function drawSplit(x,W,H){
+  const navy=S.c1, yel=S.c2, LW=470, font=(w,s)=>`${w} ${s}px "Plus Jakarta Sans", system-ui, sans-serif`;
+  x.fillStyle=navy; x.fillRect(0,0,LW,H); x.fillStyle='#FFFFFF'; x.fillRect(LW,0,W-LW,H);
+  // left: logo, company, QR
+  const logo=await loadImg(S.logo||S.logoUrl); if(logo) contain(x,logo,LW/2-80,20,160,160);
+  const words=String(S.company||'').trim().split(/\s+/).filter(Boolean), first=words[0]||'', rest=words.slice(1).join(' ');
+  x.textAlign='center'; x.textBaseline='alphabetic'; x.fillStyle=yel;
+  if(first){fit(x,first,400,70,'800'); x.fillText(first,LW/2,242);}
+  if(rest){fit(x,rest,420,21,'600'); x.fillText(rest,LW/2,272);}
+  const Q=232,P=9,T=Q+P*2,tx=LW/2-T/2,ty=292;
+  rr(x,tx,ty,T,T,16); x.fillStyle=S.qr.bgT?'#FFFFFF':S.qr.bg; x.fill();
+  x.drawImage(await qrImage(Q*3),tx+P,ty+P,Q,Q);
+  x.fillStyle='rgba(255,255,255,.78)'; x.font=font('600',17); x.fillText(CAPTION(),LW/2,ty+T+25);
+  // right top: name, title, badges
+  const badges=(await Promise.all((S.badges||[]).slice(0,3).map(loadImg))).filter(Boolean);
+  const nameW=badges.length?310:470, ink=vcContrast(navy,'#FFFFFF')>=7?navy:'#15151A';
+  glyph(x,'user',LW+50,82,44,ink,2.2);
+  x.textAlign='left'; x.fillStyle=ink; fit(x,FULLNAME(),nameW,56,'800'); x.fillText(FULLNAME(),LW+84,100);
+  if(S.title){x.fillStyle='#1E1E24'; fit(x,S.title,nameW+20,31,'500'); x.fillText(S.title,LW+84,146);}
+  if(badges.length===1) contain(x,badges[0],W-195,14,180,170);
+  else if(badges.length===2){contain(x,badges[0],W-195,12,180,82);contain(x,badges[1],W-195,100,180,82);}
+  else if(badges.length===3){contain(x,badges[0],W-200,12,92,74);contain(x,badges[1],W-104,12,92,74);contain(x,badges[2],W-175,92,140,92);}
+  // grey band + yellow icon rail
+  const bandY=196,bandB=H-40; x.fillStyle='#E4E4E6'; x.fillRect(LW,bandY,W-LW,bandB-bandY);
+  rr(x,LW-30,bandY-12,84,bandB-bandY+24,42); x.fillStyle=yel; x.fill();
+  const TX=LW+76, maxW=W-TX-26, rows=[];
+  if(S.phone) rows.push({ic:'phone',label:'Contact No',lines:[S.phone]});
+  if(S.email) rows.push({ic:'mail',label:'Mail',lines:[S.email]});
+  if(S.company||S.location){x.font=font('500',19); rows.push({ic:'pin',label:S.company||'Address',lines:S.location?wrap(x,S.location,maxW).slice(0,3):[],small:true});}
+  if(S.website) rows.push({ic:'globe',lines:[String(S.website).trim().replace(/^https?:\/\//i,'').replace(/\/$/,'')],link:true});
+  const hOf=r=>(r.label?32:0)+r.lines.length*(r.small?24:30), gap=20;
+  const total=rows.reduce((a,r)=>a+hOf(r),0)+gap*(rows.length-1); let y=bandY+Math.max(14,(bandB-bandY-total)/2);
+  rows.forEach(r=>{
+    const cy=y+(r.label?12:14); x.fillStyle='#FFFFFF'; x.beginPath(); x.arc(LW+12,cy,21,0,Math.PI*2); x.fill(); glyph(x,r.ic,LW+12,cy,22,yel===('#FFFFFF')?navy:vcReadable(yel,'#FFFFFF',2.2),2.4);
+    let ty2=y+22;
+    if(r.label){x.fillStyle=ink; fit(x,r.label,maxW,25,'800'); x.fillText(r.label,TX,ty2); ty2+=32;}
+    r.lines.forEach(l=>{x.fillStyle='#26262C'; if(r.small) x.font=font('500',19); else fit(x,l,maxW,r.link?27:25,'500');
+      if(r.link){fit(x,l,maxW,27,'500'); x.fillStyle=ink;}
+      x.fillText(l,TX,r.label?ty2-6:ty2);
+      if(r.link){const w=x.measureText(l).width; x.fillRect(TX,ty2+2,w,2);} ty2+=r.small?24:30;});
+    y+=hOf(r)+gap;
+  });
 }
 const toBlob=cv=>new Promise(r=>cv.toBlob(r,'image/png'));
 
